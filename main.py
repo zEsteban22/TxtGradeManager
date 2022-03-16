@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog
@@ -5,13 +6,37 @@ from tkinter import messagebox
 import os
 from hashlib import md5
 
+ESQUEMA={
+    'Nombre':16,
+    'Apellido':16,
+    'EVALUACIONES':18,
+    'total':6
+}
+
+TABLA_VACÍA="""\
+Nombre          |Apellido        |Total
+                |                |      """
+
 class Document:
-    def __init__(self, Frame, TextWidget, FileDir=''):
+    def __init__(self, Frame, textWidget:tk.Text, FileDir=''):
+        self.evaluaciones=dict()
+        self.textbox = textWidget
         self.file_dir = FileDir
-        self.file_name = 'Sin título' if not FileDir else os.path.basename(FileDir)
-        self.textbox = TextWidget
+        if not FileDir:
+            self.file_name = 'Sin título' 
+            self.textbox.insert('end',TABLA_VACÍA)
+        else:
+            self.file_name = os.path.basename(FileDir) 
+            with open(self.file_name) as file:
+                self.cargarDatos(file)
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
-        
+    def cargarDatos(self,file:TextIOWrapper):
+        encabezado=file.readline()
+        evaluaciones=dict([
+        (ev,eval(porcentaje.replace("%",""))*0.01) 
+        for ev,porcentaje in [
+            par.split(":") 
+            for par in encabezado.split("|")[2:1]]])
 class Editor:
     def __init__(self, master):
         self.master = master
@@ -50,6 +75,9 @@ class Editor:
         
         # Create Edit Menu
         editmenu = tk.Menu(menubar, tearoff=0)
+        editmenu.add_command(label="Añadir estudiante", command=self.nuevoEstudiante)
+        editmenu.add_command(label="Añadir evaluación", command=self.nuevaEvaluacion)
+        editmenu.add_separator()
         editmenu.add_command(label="Deshacer", command=self.undo)
         editmenu.add_separator()
         editmenu.add_command(label="Cortar", command=self.cut)
@@ -60,8 +88,15 @@ class Editor:
         
         self.master.config(menu=menubar)
         
+        # Attach to Menu Bar
+        menubar.add_cascade(label="File", menu=filemenu)
+        menubar.add_cascade(label="Edit", menu=editmenu)
+
         # Create right-click menu.
         self.right_click_menu = tk.Menu(self.master, tearoff=0)
+        self.right_click_menu.add_command(label="Añadir estudiante", command=self.nuevoEstudiante)
+        self.right_click_menu.add_command(label="Añadir evaluación", command=self.nuevaEvaluacion)
+        self.right_click_menu.add_separator()
         self.right_click_menu.add_command(label="Deshacer", command=self.undo)
         self.right_click_menu.add_separator()
         self.right_click_menu.add_command(label="Cortar", command=self.cut)
@@ -101,6 +136,7 @@ class Editor:
         textbox.bind('<Control-a>', self.select_all)
         textbox.bind('<Control-w>', self.close_tab)
         textbox.bind('<Button-3>', self.right_click)
+        textbox.bind('<Key>',self.processKey)
 
         # Pack the textbox
         textbox.pack(fill='both', expand=True)        
@@ -113,6 +149,30 @@ class Editor:
 		
         return textbox
 
+    def nuevoEstudiante(self):
+        nuevaLínea='\n'+' '*ESQUEMA['Nombre']+'|'+' '*ESQUEMA['Apellido']+len(self.tabs[ self.get_tab() ].evaluaciones)*('| '+' '*ESQUEMA['EVALUACIONES'])+'|'
+        self.tabs[ self.get_tab() ].textbox.insert('end',nuevaLínea)
+    
+    def nuevaEvaluacion(self):
+        pass
+
+    def processKey(self,e):
+        tb=self.tabs[ self.get_tab() ].textbox
+        eol = tb.index("insert lineend")
+        nextchar = tb.index("insert + %dc" % len(e.char))
+        eol_num = int(eol.split(".")[-1])
+        nextchar_num = int(nextchar.split(".")[-1])
+        if tb.get(tb.index('insert'),nextchar)=='|':
+            tb.insert('insert','|')
+            tb.delete(nextchar,tb.index("insert + 2c"))
+        else:
+            if eol_num < nextchar_num:
+                index = eol
+            else:
+                index = nextchar
+            tb.delete("insert", index)
+        
+        
     def open_file(self, *args):        
         # Open a window to browse to the file you would like to open, returns the directory.
         file_dir = (tkinter
@@ -206,8 +266,7 @@ class Editor:
             self.tabs[ self.get_tab() ].textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
         # If no text is selected.
         except tk.TclError:
-            pass
-            
+            pass        
     def cut(self):
         # Copies selection to the clipboard, then deletes selection.
         try: 
