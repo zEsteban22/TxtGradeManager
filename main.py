@@ -32,7 +32,7 @@ class Document:
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
     def cargarDatos(self,file:TextIOWrapper):
         encabezado=file.readline()
-        evaluaciones=dict([
+        self.evaluaciones=dict([
         (ev,eval(porcentaje.replace("%",""))*0.01) 
         for ev,porcentaje in [
             par.split(":") 
@@ -150,27 +150,42 @@ class Editor:
         return textbox
 
     def nuevoEstudiante(self):
-        nuevaLínea='\n'+' '*ESQUEMA['Nombre']+'|'+' '*ESQUEMA['Apellido']+len(self.tabs[ self.get_tab() ].evaluaciones)*('| '+' '*ESQUEMA['EVALUACIONES'])+'|'
+        nuevaLínea='\n'+' '*ESQUEMA['Nombre']+'|'+' '*ESQUEMA['Apellido']+len(self.tabs[ self.get_tab() ].evaluaciones)*('| '+' '*ESQUEMA['EVALUACIONES'])+'|      '
         self.tabs[ self.get_tab() ].textbox.insert('end',nuevaLínea)
     
     def nuevaEvaluacion(self):
-        pass
+        t=self.tabs[ self.get_tab() ].textbox
+        t.insert('1.%d'%(len(t.get("1.0","2.0"))-7),'| evaluación : 0.0%')
+        for lineNum,lineTxt in enumerate(t.get('2.0', 'end-1c').splitlines()):
+            t.insert('%d.%d'%(2+lineNum,len(lineTxt)-7),'|'+'                  ')
 
-    def processKey(self,e):
+    def processKey(self,event):
+        if(len(event.char)==0 and event.keycode!=46): return 
+        elif event.char=='|': return "break"
         tb=self.tabs[ self.get_tab() ].textbox
+        insert=tb.index("insert")
         eol = tb.index("insert lineend")
-        nextchar = tb.index("insert + %dc" % len(e.char))
-        eol_num = int(eol.split(".")[-1])
-        nextchar_num = int(nextchar.split(".")[-1])
-        if tb.get(tb.index('insert'),nextchar)=='|':
-            tb.insert('insert','|')
-            tb.delete(nextchar,tb.index("insert + 2c"))
+        nextchar = tb.index("insert + %dc" % len(event.char))
+        resto_de_la_linea=tb.get(nextchar,eol)
+        if tb.get(insert,nextchar)=='|':
+            tb.delete(insert,nextchar)
+            tb.insert(insert,'|')
+            resto_de_la_linea='|'+resto_de_la_linea
+        if event.char=="\x08" and insert.split('.')[-1]=='0':
+            return "break"
+        elif eol != insert:
+            for c,e in enumerate(resto_de_la_linea):
+                if e=='|' or c+1==len(resto_de_la_linea):
+                    if event.char=='\x08':
+                        tb.insert(tb.index(f"insert +{c+1}c"),' ')
+                    elif event.keycode==46:
+                        tb.insert(tb.index(f"insert +{c}c"),' ')
+                    else:
+                        tb.delete(tb.index(f"insert +{c}c"), tb.index(f"insert +{c+1}c") )
+                    break
         else:
-            if eol_num < nextchar_num:
-                index = eol
-            else:
-                index = nextchar
-            tb.delete("insert", index)
+            if event.keycode==46: return "break"
+            tb.delete(tb.index("insert-1c"),eol)
         
         
     def open_file(self, *args):        
